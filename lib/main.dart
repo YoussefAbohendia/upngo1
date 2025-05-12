@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:upngo/SmartAlarmMapScreenState.dart';
 import 'package:upngo/registerScreen.dart';
 
-import 'homeScreen.dart';
 import 'loginScreen.dart';
 
 void main() async {
@@ -60,7 +60,7 @@ class MyApp extends StatelessWidget {
 
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignupScreen(),
-        '/home': (context) => const HomeScreen(),
+        '/home': (context) => const WakeUpPlannerScreen(),
       },
     );
   }

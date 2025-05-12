@@ -1,23 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'main.dart';
-
-void main() => runApp(const WakeUpPlannerApp());
-
-class WakeUpPlannerApp extends StatelessWidget {
-  const WakeUpPlannerApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Wake-Up Planner',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const WakeUpPlannerScreen(),
-    );
-  }
-}
 
 class WakeUpPlannerScreen extends StatefulWidget {
   const WakeUpPlannerScreen({super.key});
