@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-  
 
 import 'login_screen.dart';
 import 'signup_screen.dart';
 import 'home_screen.dart';
-
 import 'HistoryScreen.dart';
-//import 'planner_screen.dart';
-//import 'profile_screen.dart';
+import 'create_alarm_screen.dart';
+import 'create_travel_alarm_screen.dart';
 import 'splash_screen.dart';
 import 'app theme.dart';
+import 'alarms.dart'; // Make sure this file exists and is in the correct directory
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -42,10 +42,37 @@ class MyApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignupScreen(),
         '/home': (context) => const HomeScreen(),
-        //'/planner': (context) => const PlannerScreen(),
         '/history': (context) => const HistoryScreen(),
+        '/alarms': (context) => const AlarmsScreen(),            // ✅ ADDED THIS LINE
+        '/alarms/create': (context) => const CreateAlarmScreen(),
+        // Add other simple static routes here if needed
+      },
 
-        //'/profile': (context) => const ProfileScreen(),
+      // 🔄 For routes needing parameters (like travel alarm or ringing alarm)
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/create-travel-alarm':
+            return MaterialPageRoute(
+              builder: (context) => CreateTravelAlarmScreen(
+                onAlarmCreated: (alarm) {
+                  debugPrint('Created travel alarm: $alarm');
+                },
+              ),
+            );
+
+        }
+      },
+
+      // 🚫 Handles invalid routes gracefully
+      onUnknownRoute: (settings) {
+        return MaterialPageRoute(
+          builder: (context) => Scaffold(
+            appBar: AppBar(title: const Text('Page Not Found')),
+            body: const Center(
+              child: Text('The page you are looking for does not exist.'),
+            ),
+          ),
+        );
       },
     );
   }

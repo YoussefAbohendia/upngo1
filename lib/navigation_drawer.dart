@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
+import 'alarms.dart';
+import 'HistoryScreen.dart';
+
 
 class AppDrawer extends StatelessWidget {
   final String currentRoute;
@@ -132,11 +135,20 @@ class AppDrawer extends StatelessWidget {
 
         // Only navigate if not already on this route
         if (currentRoute != route) {
-          Navigator.pushReplacementNamed(context, route);
+          if (route == '/history') {
+            // Special: Use push for /history so back arrow shows
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const HistoryScreen()),
+            );
+          } else {
+            Navigator.pushReplacementNamed(context, route);
+          }
         }
       },
     );
   }
+
 
   Widget _buildFooter(BuildContext context) {
     return Container(
