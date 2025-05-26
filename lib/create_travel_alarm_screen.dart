@@ -7,8 +7,11 @@ import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'home_screen.dart';
-import 'map_location_picker.dart';
+import 'dart:async';
 
+
+// Replace with your actual Google Maps API Key
+const String _googleMapsApiKey = 'AIzaSyAd7cupt2geMSp7t3oiQOT-q6vAC_F-KRg';
 
 class CreateTravelAlarmScreen extends StatefulWidget {
   final Function(Map<String, dynamic>) onAlarmCreated;
@@ -25,33 +28,24 @@ class CreateTravelAlarmScreen extends StatefulWidget {
 class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers
-  final TextEditingController _titleController = TextEditingController(
-      text: '');
+  final TextEditingController _titleController = TextEditingController(text: '');
   final TextEditingController _originController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
 
-  // Form values - ONLY target arrival time (user input)
-  TimeOfDay _targetArrivalTime = TimeOfDay(
-      hour: 9, minute: 0); // When user wants to arrive
-  DateTime _targetArrivalDate = DateTime.now().add(
-      Duration(days: 1)); // Default to tomorrow
-  int _preparationTimeMinutes = 45; // Time needed to get ready before leaving
+  TimeOfDay _targetArrivalTime = TimeOfDay(hour: 9, minute: 0);
+  DateTime _targetArrivalDate = DateTime.now().add(Duration(days: 1));
+  int _preparationTimeMinutes = 45;
   int _transportMode = 0; // 0: driving, 1: public transit, 2: walking
   List<bool> _repeatDays = List.filled(7, false);
   bool _vibrateEnabled = true;
   String _selectedSound = 'Gentle Rise';
   int _snoozeDuration = 5;
 
-  // Location data
   LatLng? _originLatLng;
   LatLng? _destinationLatLng;
-  int _estimatedTravelTime = 30; // minutes (calculated from Google Maps)
+  int _estimatedTravelTime = 30; // minutes
   bool _isLoadingTravelTime = false;
   bool _isLoading = false;
-
-  // Google Maps API Key - Replace with your actual API key
-  static const String _googleMapsApiKey = 'YOUR_GOOGLE_MAPS_API_KEY_HERE';
 
   @override
   void initState() {
@@ -68,11 +62,9 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
           return;
         }
       }
-
       if (permission == LocationPermission.deniedForever) {
         return;
       }
-
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
@@ -81,7 +73,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
         position.latitude,
         position.longitude,
       );
-
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
         setState(() {
@@ -95,45 +86,30 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
   }
 
   Future<void> _openMapForLocationPicker({required bool isOrigin}) async {
-    final result = await Navigator.push<LatLng>(
+    final result = await Navigator.push<Map<String, dynamic>>(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            MapLocationPicker(
-              initialLocation: isOrigin ? _originLatLng : _destinationLatLng,
-              title: isOrigin ? 'Select Origin' : 'Select Destination',
-            ),
+        builder: (context) => MapLocationPicker(
+          apiKey: _googleMapsApiKey,
+          initialLocation: isOrigin ? _originLatLng : _destinationLatLng,
+          title: isOrigin ? 'Select Pickup Location' : 'Select Dropoff Location',
+        ),
       ),
     );
 
     if (result != null) {
-      try {
-        List<Placemark> placemarks = await placemarkFromCoordinates(
-          result.latitude,
-          result.longitude,
-        );
-
-        if (placemarks.isNotEmpty) {
-          Placemark place = placemarks[0];
-          String address = '${place.street}, ${place.locality}';
-
-          setState(() {
-            if (isOrigin) {
-              _originLatLng = result;
-              _originController.text = address;
-            } else {
-              _destinationLatLng = result;
-              _destinationController.text = address;
-            }
-          });
-
-          // Calculate travel time if both locations are set
-          if (_originLatLng != null && _destinationLatLng != null) {
-            await _calculateTravelTime();
-          }
+      setState(() {
+        if (isOrigin) {
+          _originLatLng = result['latlng'];
+          _originController.text = result['address'] ?? '';
+        } else {
+          _destinationLatLng = result['latlng'];
+          _destinationController.text = result['address'] ?? '';
         }
-      } catch (e) {
-        debugPrint('Error getting address: $e');
+      });
+      // Calculate travel time if both locations are set
+      if (_originLatLng != null && _destinationLatLng != null) {
+        await _calculateTravelTime();
       }
     }
   }
@@ -159,7 +135,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
           break;
       }
 
-      // Calculate the planned departure time (when user should leave home)
       final targetArrivalDateTime = DateTime(
         _targetArrivalDate.year,
         _targetArrivalDate.month,
@@ -168,7 +143,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
         _targetArrivalTime.minute,
       );
 
-      // User should leave home this much time before their target arrival
       final plannedDepartureTime = targetArrivalDateTime.subtract(
           Duration(minutes: _preparationTimeMinutes)
       );
@@ -176,11 +150,9 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
       final url = Uri.parse(
           'https://maps.googleapis.com/maps/api/directions/json?'
               'origin=${_originLatLng!.latitude},${_originLatLng!.longitude}&'
-              'destination=${_destinationLatLng!.latitude},${_destinationLatLng!
-              .longitude}&'
+              'destination=${_destinationLatLng!.latitude},${_destinationLatLng!.longitude}&'
               'mode=$travelMode&'
-              'departure_time=${(plannedDepartureTime.millisecondsSinceEpoch /
-              1000).round()}&'
+              'departure_time=${(plannedDepartureTime.millisecondsSinceEpoch / 1000).round()}&'
               'traffic_model=best_guess&'
               'key=$_googleMapsApiKey'
       );
@@ -194,7 +166,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
           final route = data['routes'][0];
           final legs = route['legs'][0];
 
-          // Get duration in traffic if available, otherwise use regular duration
           int durationSeconds;
           if (legs['duration_in_traffic'] != null) {
             durationSeconds = legs['duration_in_traffic']['value'];
@@ -207,8 +178,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
             _isLoadingTravelTime = false;
           });
 
-          debugPrint(
-              '✅ Travel time calculated: $_estimatedTravelTime minutes (with traffic)');
+          debugPrint('✅ Travel time calculated: $_estimatedTravelTime minutes (with traffic)');
         } else {
           debugPrint('❌ Google Maps API error: ${data['status']}');
           _setDefaultTravelTime();
@@ -226,15 +196,9 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
   void _setDefaultTravelTime() {
     setState(() {
       switch (_transportMode) {
-        case 0: // Driving
-          _estimatedTravelTime = 30;
-          break;
-        case 1: // Public transit
-          _estimatedTravelTime = 45;
-          break;
-        case 2: // Walking
-          _estimatedTravelTime = 60;
-          break;
+        case 0: _estimatedTravelTime = 30; break;
+        case 1: _estimatedTravelTime = 45; break;
+        case 2: _estimatedTravelTime = 60; break;
       }
       _isLoadingTravelTime = false;
     });
@@ -249,11 +213,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
     );
 
     if (picked != null && picked != _targetArrivalTime) {
-      setState(() {
-        _targetArrivalTime = picked;
-      });
-
-      // Recalculate travel time with new target arrival time
+      setState(() { _targetArrivalTime = picked; });
       if (_originLatLng != null && _destinationLatLng != null) {
         await _calculateTravelTime();
       }
@@ -270,18 +230,13 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
     );
 
     if (picked != null && picked != _targetArrivalDate) {
-      setState(() {
-        _targetArrivalDate = picked;
-      });
-
-      // Recalculate travel time with new target arrival date
+      setState(() { _targetArrivalDate = picked; });
       if (_originLatLng != null && _destinationLatLng != null) {
         await _calculateTravelTime();
       }
     }
   }
 
-  // This calculates the AUTOMATIC wake-up time based on traffic + prep time
   TimeOfDay _getCalculatedWakeUpTime() {
     final targetArrivalDateTime = DateTime(
       _targetArrivalDate.year,
@@ -290,16 +245,10 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
       _targetArrivalTime.hour,
       _targetArrivalTime.minute,
     );
-
-    // Wake up time = Target arrival - Travel time - Preparation time
     final wakeUpDateTime = targetArrivalDateTime.subtract(
         Duration(minutes: _estimatedTravelTime + _preparationTimeMinutes)
     );
-
-    return TimeOfDay(
-      hour: wakeUpDateTime.hour,
-      minute: wakeUpDateTime.minute,
-    );
+    return TimeOfDay(hour: wakeUpDateTime.hour, minute: wakeUpDateTime.minute);
   }
 
   String _formatTimeOfDay(TimeOfDay time) {
@@ -323,57 +272,42 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
       );
       return;
     }
-
-    // Validate that both locations are selected
     if (_originLatLng == null || _destinationLatLng == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(
-            'Please select both origin and destination locations.')),
+        const SnackBar(content: Text('Please select both origin and destination locations.')),
       );
       return;
     }
-
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() { _isLoading = true; });
 
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('You must be logged in to save the alarm.')),
+            const SnackBar(content: Text('You must be logged in to save the alarm.')),
           );
         }
         return;
       }
 
-      // Calculate the automatic wake-up time
       final TimeOfDay calculatedWakeUpTime = _getCalculatedWakeUpTime();
-      final String formattedWakeUp = '${calculatedWakeUpTime.hour.toString()
-          .padLeft(2, '0')}:${calculatedWakeUpTime.minute.toString().padLeft(
-          2, '0')}';
-      final String formattedTargetArrival = '${_targetArrivalTime.hour
-          .toString().padLeft(2, '0')}:${_targetArrivalTime.minute.toString()
-          .padLeft(2, '0')}';
+      final String formattedWakeUp = '${calculatedWakeUpTime.hour.toString().padLeft(2, '0')}:${calculatedWakeUpTime.minute.toString().padLeft(2, '0')}';
+      final String formattedTargetArrival = '${_targetArrivalTime.hour.toString().padLeft(2, '0')}:${_targetArrivalTime.minute.toString().padLeft(2, '0')}';
 
       final List<int> activeDays = [];
       for (int i = 0; i < _repeatDays.length; i++) {
-        if (_repeatDays[i]) {
-          activeDays.add(i + 1);
-        }
+        if (_repeatDays[i]) { activeDays.add(i + 1); }
       }
 
-      // Trip details for database
       final tripData = {
         'user_id': user.id,
         'trip_name': _titleController.text.trim(),
         'start_location': _originController.text.trim(),
         'destination': _destinationController.text.trim(),
         'travel_time': '$_estimatedTravelTime mins',
-        'alarm_time': formattedWakeUp, // Automatically calculated
-        'arrival_time': formattedTargetArrival, // User's target arrival time
+        'alarm_time': formattedWakeUp,
+        'arrival_time': formattedTargetArrival,
         'arrival_date': DateFormat('yyyy-MM-dd').format(_targetArrivalDate),
         'transport_mode': _transportMode,
         'preparation_time': _preparationTimeMinutes,
@@ -384,11 +318,10 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
         'created_at': DateTime.now().toIso8601String(),
       };
 
-      // Alarm details for database
       final alarmData = {
         'user_id': user.id,
         'trip_name': _titleController.text.trim(),
-        'alarm_time': formattedWakeUp, // Automatically calculated
+        'alarm_time': formattedWakeUp,
         'location': _destinationController.text.trim(),
         'active': true,
         'vibrate': _vibrateEnabled,
@@ -399,36 +332,24 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
         'created_at': DateTime.now().toIso8601String(),
       };
 
-      // Save trip details
       try {
         await Supabase.instance.client.from('trip_details').insert(tripData);
-        debugPrint('✅ Trip details saved successfully');
       } catch (tripError) {
         debugPrint('❌ Error saving trip details: $tripError');
       }
 
-      // Save alarm details
       try {
-        final response = await Supabase.instance.client.from('alarms').insert(
-            alarmData).select();
+        final response = await Supabase.instance.client.from('alarms').insert(alarmData).select();
         debugPrint('✅ Alarm saved successfully: $response');
       } catch (alarmError) {
         debugPrint('❌ Error saving alarm: $alarmError');
-        if (alarmError.toString().contains('alarm_time')) {
-          throw Exception(
-              'Database schema error: alarm_time column is missing. Please update your database schema.');
-        }
         rethrow;
       }
 
-      // Local alarm object for the app
       final Map<String, dynamic> newAlarm = {
-        'id': DateTime
-            .now()
-            .millisecondsSinceEpoch
-            .toString(),
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
         'title': _titleController.text.trim(),
-        'time': formattedWakeUp, // Automatically calculated
+        'time': formattedWakeUp,
         'days': activeDays,
         'active': true,
         'vibrate': _vibrateEnabled,
@@ -438,8 +359,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
         'origin': _originController.text.trim(),
         'destination': _destinationController.text.trim(),
         'target_arrival_time': formattedTargetArrival,
-        'target_arrival_date': DateFormat('yyyy-MM-dd').format(
-            _targetArrivalDate),
+        'target_arrival_date': DateFormat('yyyy-MM-dd').format(_targetArrivalDate),
         'travel_mode': _transportMode,
         'preparation_time': _preparationTimeMinutes,
         'estimated_travel_time': _estimatedTravelTime,
@@ -471,10 +391,8 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
       debugPrint('❌ Error saving alarm: $error');
       if (mounted) {
         String errorMessage = 'Failed to save alarm';
-
         if (error.toString().contains('alarm_time')) {
-          errorMessage =
-          'Database error: Missing required columns. Please contact support.';
+          errorMessage = 'Database error: Missing required columns. Please contact support.';
         } else if (error.toString().contains('authentication')) {
           errorMessage = 'Authentication error. Please log in again.';
         } else if (error.toString().contains('network')) {
@@ -495,33 +413,22 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() { _isLoading = false; });
       }
     }
   }
 
   Widget _buildDayToggle(int index, String label) {
-    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return GestureDetector(
       onTap: () => _toggleDay(index),
       child: Container(
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: _repeatDays[index]
-              ? Theme
-              .of(context)
-              .primaryColor
-              : Colors.grey[200],
+          color: _repeatDays[index] ? Theme.of(context).primaryColor : Colors.grey[200],
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: _repeatDays[index]
-                ? Theme
-                .of(context)
-                .primaryColor
-                : Colors.grey[400]!,
+            color: _repeatDays[index] ? Theme.of(context).primaryColor : Colors.grey[400]!,
           ),
         ),
         child: Center(
@@ -549,9 +456,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('🤖 Smart Travel Alarm'),
-        backgroundColor: Theme
-            .of(context)
-            .primaryColor,
+        backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -581,7 +486,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Smart wake-up time display - THE MAIN FEATURE
+              // Wake-up time card (same as your UI)
               Card(
                 margin: const EdgeInsets.only(bottom: 24.0),
                 shape: RoundedRectangleBorder(
@@ -595,14 +500,8 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Theme
-                            .of(context)
-                            .primaryColor
-                            .withOpacity(0.1),
-                        Theme
-                            .of(context)
-                            .primaryColor
-                            .withOpacity(0.05),
+                        Theme.of(context).primaryColor.withOpacity(0.1),
+                        Theme.of(context).primaryColor.withOpacity(0.05),
                       ],
                     ),
                   ),
@@ -615,9 +514,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Theme
-                                    .of(context)
-                                    .primaryColor,
+                                color: Theme.of(context).primaryColor,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(
@@ -633,30 +530,24 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                                 children: [
                                   Text(
                                     '🤖 Smart Wake-up Time',
-                                    style: Theme
-                                        .of(context)
+                                    style: Theme.of(context)
                                         .textTheme
                                         .titleMedium
                                         ?.copyWith(
                                       fontWeight: FontWeight.bold,
-                                      color: Theme
-                                          .of(context)
-                                          .primaryColor,
+                                      color: Theme.of(context).primaryColor,
                                     ),
                                   ),
                                   Row(
                                     children: [
                                       Text(
                                         _formatTimeOfDay(calculatedWakeUpTime),
-                                        style: Theme
-                                            .of(context)
+                                        style: Theme.of(context)
                                             .textTheme
                                             .headlineMedium
                                             ?.copyWith(
                                           fontWeight: FontWeight.bold,
-                                          color: Theme
-                                              .of(context)
-                                              .primaryColor,
+                                          color: Theme.of(context).primaryColor,
                                         ),
                                       ),
                                       if (_isLoadingTravelTime) ...[
@@ -664,8 +555,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                                         const SizedBox(
                                           width: 16,
                                           height: 16,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2),
+                                          child: CircularProgressIndicator(strokeWidth: 2),
                                         ),
                                       ],
                                     ],
@@ -688,30 +578,23 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                                 _isLoadingTravelTime
                                     ? '🚗 Calculating with real-time traffic...'
                                     : '📊 Automatically calculated based on:',
-                                style: Theme
-                                    .of(context)
+                                style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
-                                    ?.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                ),
+                                    ?.copyWith(fontWeight: FontWeight.w500),
                                 textAlign: TextAlign.center,
                               ),
                               if (!_isLoadingTravelTime) ...[
                                 const SizedBox(height: 8),
                                 Text(
-                                  '🎯 Target arrival: ${_formatTimeOfDay(
-                                      _targetArrivalTime)}\n'
+                                  '🎯 Target arrival: ${_formatTimeOfDay(_targetArrivalTime)}\n'
                                       '🚗 Travel time: ${_estimatedTravelTime} min (with traffic)\n'
                                       '⏰ Preparation time: ${_preparationTimeMinutes} min\n'
                                       '📱 NO manual time setting needed!',
-                                  style: Theme
-                                      .of(context)
+                                  style: Theme.of(context)
                                       .textTheme
                                       .bodySmall
-                                      ?.copyWith(
-                                    color: Colors.grey[700],
-                                  ),
+                                      ?.copyWith(color: Colors.grey[700]),
                                   textAlign: TextAlign.center,
                                 ),
                               ],
@@ -724,7 +607,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                 ),
               ),
 
-              // Basic alarm info
               TextFormField(
                 controller: _titleController,
                 decoration: const InputDecoration(
@@ -734,9 +616,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                   hintText: 'e.g., "Morning commute to office"',
                 ),
                 validator: (value) {
-                  if (value == null || value
-                      .trim()
-                      .isEmpty) {
+                  if (value == null || value.trim().isEmpty) {
                     return 'Please enter a trip name';
                   }
                   return null;
@@ -745,107 +625,95 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
 
               const SizedBox(height: 24),
 
-              // Travel information section
+              // Uber-style buttons for origin/destination with map picker
               Text(
                 '📍 Travel Route',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 12),
 
-              // Origin with map button
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _originController,
-                      decoration: const InputDecoration(
-                        labelText: 'Starting Location',
-                        prefixIcon: Icon(Icons.my_location),
-                        hintText: 'Where will you start your journey?',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value
-                            .trim()
-                            .isEmpty) {
-                          return 'Please select your starting location';
-                        }
-                        return null;
-                      },
-                      readOnly: false,
-                    ),
+              // Origin Picker
+              Card(
+                child: ListTile(
+                  leading: Icon(Icons.radio_button_checked, color: Colors.green),
+                  title: Text(
+                    _originController.text.isEmpty
+                        ? "Select Pickup Location"
+                        : _originController.text,
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: () => _openMapForLocationPicker(isOrigin: true),
-                    icon: const Icon(Icons.map),
-                    tooltip: 'Select on map',
-                    style: IconButton.styleFrom(
-                      backgroundColor: Theme
-                          .of(context)
-                          .primaryColor
-                          .withOpacity(0.1),
-                    ),
-                  ),
-                ],
+                  trailing: Icon(Icons.map),
+                  onTap: () => _openMapForLocationPicker(isOrigin: true),
+                ),
               ),
+              const SizedBox(height: 8),
+
+              // Destination Picker
+              Card(
+                child: ListTile(
+                  leading: Icon(Icons.location_on, color: Colors.red),
+                  title: Text(
+                    _destinationController.text.isEmpty
+                        ? "Select Dropoff Location"
+                        : _destinationController.text,
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  trailing: Icon(Icons.map),
+                  onTap: () => _openMapForLocationPicker(isOrigin: false),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Show mini map with markers if both set (optional, Uber-style)
+              if (_originLatLng != null || _destinationLatLng != null)
+                Container(
+                  height: 180,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: _originLatLng ??
+                            _destinationLatLng ??
+                            LatLng(30.0444, 31.2357),
+                        zoom: 13,
+                      ),
+                      markers: {
+                        if (_originLatLng != null)
+                          Marker(
+                            markerId: MarkerId("origin"),
+                            position: _originLatLng!,
+                            icon: BitmapDescriptor.defaultMarkerWithHue(
+                                BitmapDescriptor.hueGreen),
+                            infoWindow: InfoWindow(title: "Pickup"),
+                          ),
+                        if (_destinationLatLng != null)
+                          Marker(
+                            markerId: MarkerId("dest"),
+                            position: _destinationLatLng!,
+                            icon: BitmapDescriptor.defaultMarkerWithHue(
+                                BitmapDescriptor.hueRed),
+                            infoWindow: InfoWindow(title: "Dropoff"),
+                          ),
+                      },
+                      myLocationEnabled: true,
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled: false,
+                      liteModeEnabled: true,
+                    ),
+                  ),
+                ),
+
+              // ...all your other settings and controls as before...
+              // The rest of your alarm options (mode, repeat, alarm, etc.)
 
               const SizedBox(height: 16),
-
-              // Destination with map button
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _destinationController,
-                      decoration: const InputDecoration(
-                        labelText: 'Destination',
-                        prefixIcon: Icon(Icons.location_on),
-                        hintText: 'Where do you need to arrive?',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value
-                            .trim()
-                            .isEmpty) {
-                          return 'Please select your destination';
-                        }
-                        return null;
-                      },
-                      readOnly: false,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: () => _openMapForLocationPicker(isOrigin: false),
-                    icon: const Icon(Icons.map),
-                    tooltip: 'Select on map',
-                    style: IconButton.styleFrom(
-                      backgroundColor: Theme
-                          .of(context)
-                          .primaryColor
-                          .withOpacity(0.1),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 24),
-
               // Transport mode
               Text(
                 '🚗 How will you travel?',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -874,7 +742,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                   setState(() {
                     _transportMode = newSelection.first;
                   });
-                  // Recalculate travel time with new transport mode
                   if (_originLatLng != null && _destinationLatLng != null) {
                     _calculateTravelTime();
                   }
@@ -883,31 +750,22 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
 
               const SizedBox(height: 24),
 
-              // Target arrival time section (NOT alarm time!)
+              // Target arrival time section
               Text(
                 '🎯 When do you want to arrive?',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
               Text(
                 '⚡ The alarm will be automatically set based on this target arrival time',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Colors.orange[700],
                   fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 12),
 
-              // Target arrival date
               InkWell(
                 onTap: _selectTargetArrivalDate,
                 child: InputDecorator(
@@ -919,8 +777,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(DateFormat('EEE, MMM d, yyyy').format(
-                          _targetArrivalDate)),
+                      Text(DateFormat('EEE, MMM d, yyyy').format(_targetArrivalDate)),
                       const Icon(Icons.arrow_drop_down),
                     ],
                   ),
@@ -929,7 +786,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
 
               const SizedBox(height: 16),
 
-              // Target arrival time
               InkWell(
                 onTap: _selectTargetArrivalTime,
                 child: InputDecorator(
@@ -939,8 +795,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                     border: OutlineInputBorder(),
                   ),
                   child: Row(
-                    mainAxisAlignment:
-                    MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(_formatTimeOfDay(_targetArrivalTime)),
                       const Icon(Icons.arrow_drop_down),
@@ -954,21 +809,13 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
               // Preparation time slider
               Text(
                 '⏰ Preparation Time: $_preparationTimeMinutes min',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
               Text(
                 'How long do you need to get ready before leaving?',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Colors.grey[600],
                 ),
               ),
@@ -982,7 +829,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                   setState(() {
                     _preparationTimeMinutes = value.round();
                   });
-                  // Recalculate wake-up time and travel time if possible
                   if (_originLatLng != null && _destinationLatLng != null) {
                     _calculateTravelTime();
                   }
@@ -994,11 +840,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
               // Repeat days
               Text(
                 '📅 Repeat Schedule',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1021,11 +863,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
               // Alarm options
               Text(
                 '🔊 Alarm Settings',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1034,7 +872,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                 margin: const EdgeInsets.only(top: 10, bottom: 28),
                 child: Column(
                   children: [
-                    // Vibrate toggle
                     SwitchListTile(
                       title: const Text('Vibrate'),
                       value: _vibrateEnabled,
@@ -1044,7 +881,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                         });
                       },
                     ),
-                    // Alarm sound selection
                     ListTile(
                       leading: const Icon(Icons.music_note),
                       title: const Text('Alarm Sound'),
@@ -1069,7 +905,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                         },
                       ),
                     ),
-                    // Snooze duration
                     ListTile(
                       leading: const Icon(Icons.snooze),
                       title: const Text('Snooze Duration'),
@@ -1093,7 +928,6 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
                 ),
               ),
 
-              // Set Smart Alarm Button
               Center(
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.alarm_add),
@@ -1116,11 +950,7 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
 
               Text(
                 '* The alarm will automatically adapt if your trip details change.\n* Make sure notifications and background permissions are enabled!',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.grey[600],
                   fontStyle: FontStyle.italic,
                 ),
@@ -1129,6 +959,189 @@ class _CreateTravelAlarmScreenState extends State<CreateTravelAlarmScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// -----------------------------
+// Uber-style Location Picker Widget
+// -----------------------------
+class MapLocationPicker extends StatefulWidget {
+  final String apiKey;
+  final LatLng? initialLocation;
+  final String title;
+
+  const MapLocationPicker({
+    Key? key,
+    required this.apiKey,
+    this.initialLocation,
+    required this.title,
+  }) : super(key: key);
+
+  @override
+  State<MapLocationPicker> createState() => _MapLocationPickerState();
+}
+
+class _MapLocationPickerState extends State<MapLocationPicker> {
+  late GoogleMapController _mapController;
+  LatLng? _selectedLatLng;
+  String _address = '';
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounce;
+  List<Map<String, dynamic>> _predictions = [];
+  bool _searching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedLatLng = widget.initialLocation ?? LatLng(30.0444, 31.2357); // Cairo default
+    _reverseGeocode(_selectedLatLng!);
+  }
+
+  void _onMapTap(LatLng pos) {
+    setState(() {
+      _selectedLatLng = pos;
+      _predictions.clear();
+      _searchController.clear();
+      _address = '';
+    });
+    _reverseGeocode(pos);
+  }
+
+  Future<void> _reverseGeocode(LatLng pos) async {
+    final url = Uri.parse(
+        "https://maps.googleapis.com/maps/api/geocode/json?latlng=${pos.latitude},${pos.longitude}&key=${widget.apiKey}");
+    final res = await http.get(url);
+    if (res.statusCode == 200) {
+      final data = json.decode(res.body);
+      if (data['results'] != null && data['results'].isNotEmpty) {
+        setState(() {
+          _address = data['results'][0]['formatted_address'];
+        });
+      }
+    }
+  }
+
+  Future<void> _searchPlace(String input) async {
+    if (input.isEmpty) {
+      setState(() => _predictions.clear());
+      return;
+    }
+    setState(() => _searching = true);
+    final url = Uri.parse(
+        "https://maps.googleapis.com/maps/api/place/autocomplete/json?input=$input&key=${widget.apiKey}&language=en&components=country:eg|country:us|country:gb|country:ca|country:au");
+    final res = await http.get(url);
+    if (res.statusCode == 200) {
+      final data = json.decode(res.body);
+      setState(() {
+        _predictions = List<Map<String, dynamic>>.from(data['predictions']);
+        _searching = false;
+      });
+    }
+  }
+
+  Future<void> _selectPrediction(Map<String, dynamic> prediction) async {
+    final placeId = prediction['place_id'];
+    final url = Uri.parse(
+        "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&fields=geometry,formatted_address&key=${widget.apiKey}");
+    final res = await http.get(url);
+    if (res.statusCode == 200) {
+      final data = json.decode(res.body);
+      final loc = data['result']['geometry']['location'];
+      final latLng = LatLng(loc['lat'], loc['lng']);
+      setState(() {
+        _selectedLatLng = latLng;
+        _address = data['result']['formatted_address'];
+        _predictions.clear();
+        _searchController.text = _address;
+      });
+      _mapController.animateCamera(CameraUpdate.newLatLng(latLng));
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          TextButton(
+            onPressed: _selectedLatLng != null
+                ? () => Navigator.pop(context, {'latlng': _selectedLatLng, 'address': _address})
+                : null,
+            child: Text("Confirm", style: TextStyle(color: _selectedLatLng != null ? Colors.blue : Colors.grey)),
+          )
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: "Search for a place",
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (text) {
+                if (_debounce?.isActive ?? false) _debounce!.cancel();
+                _debounce = Timer(const Duration(milliseconds: 400), () => _searchPlace(text));
+              },
+            ),
+          ),
+          if (_searching)
+            Center(child: CircularProgressIndicator()),
+          if (_predictions.isNotEmpty)
+            Container(
+              color: Colors.white,
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _predictions.length,
+                separatorBuilder: (c, i) => Divider(),
+                itemBuilder: (context, idx) {
+                  final pred = _predictions[idx];
+                  return ListTile(
+                    title: Text(pred['structured_formatting']?['main_text'] ?? pred['description']),
+                    subtitle: Text(pred['structured_formatting']?['secondary_text'] ?? ""),
+                    onTap: () => _selectPrediction(pred),
+                  );
+                },
+              ),
+            ),
+          Expanded(
+            child: GoogleMap(
+              initialCameraPosition: CameraPosition(
+                  target: _selectedLatLng ?? LatLng(30.0444, 31.2357), zoom: 14),
+              markers: _selectedLatLng != null
+                  ? {
+                Marker(
+                    markerId: MarkerId('selected'),
+                    position: _selectedLatLng!,
+                    infoWindow: InfoWindow(title: _address))
+              }
+                  : {},
+              onMapCreated: (controller) => _mapController = controller,
+              onTap: _onMapTap,
+              myLocationButtonEnabled: true,
+              myLocationEnabled: true,
+            ),
+          ),
+          if (_address.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text("Selected: $_address",
+                  style: TextStyle(fontWeight: FontWeight.w500)),
+            ),
+        ],
       ),
     );
   }
